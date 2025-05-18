@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Stream</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: white;
+        }
+        #screen-image {
+            width: 800px;
+            height: 480px;
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            object-fit: contain;
+            pointer-events: auto;
+        }
+        .overlay-text {
+            position: absolute;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+        #fps-text {
+            color: green;
+            bottom: 10px;
+            left: 10px;
+        }
+        #frame-time-text {
+            color: red;
+            bottom: 10px;
+            right: 10px;
+        }
+
+        #touch-listener-frame {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            pointer-events: auto;
+            border: none;
+            overflow: hidden;
+        }
+
+
+
+
+    </style>
+    <script>
+        const host = window.location.hostname;
+        let lastFrameTime = performance.now();
+        let eventQueue = []; // Queue to store events before sending with frame requests
+
+    function queueEvent(type, data) {
+        if (eventQueue.length >= 5) {
+            eventQueue.shift(); // Remove oldest event if queue exceeds max size
+        }
+        eventQueue.push({ type, data });
+    }
+
+        function encodeEvents() {
+            return eventQueue.map(event => `${event.type}=${encodeURIComponent(JSON.stringify(event.data))}`).join('&');
+        }
+
+        window.onload = function() {
+            const screenImage = document.getElementById('screen-image');
+            const fpsText = document.getElementById('fps-text');
+            const frameTimeText = document.getElementById('frame-time-text');
+
+            let isTouching = false;
+            let lastRequestTime = 0;
+            const debounceInterval = 33; // 70ms debounce
+
+            const iframe = document.getElementById("touch-listener-frame");
+            iframe.focus();
+
+            iframe.contentWindow.document.addEventListener("touchstart", (event) => {
+                isTouching = true;
+                queueEvent("tap", { x: event.touches[0].clientX, y: event.touches[0].clientY, type: "mousedown" });
+            }, { passive: true });
+
+            iframe.contentWindow.document.addEventListener("touchmove", (event) => {
+                if (isTouching) {
+                    const currentTime = Date.now();
+                    if (currentTime - lastRequestTime > debounceInterval) {
+                        queueEvent("tap", { x: event.touches[0].clientX, y: event.touches[0].clientY, type: "mousemove" });
+                        lastRequestTime = currentTime;
+                    }
+                }
+            }, { passive: true });
+
+            iframe.contentWindow.document.addEventListener("touchend", (event) => {
+                isTouching = false;
+                queueEvent("tap", { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY, type: "mouseup" });
+            }, { passive: true });
+
+
+            /*
+            // Handle touch events
+            screenImage.addEventListener('touchstart', (event) => {
+                isTouching = true;
+                const touch = event.touches[0];
+                queueEvent("tap", { x: touch.clientX, y: touch.clientY, type: "mousedown" });
+            });
+
+            screenImage.addEventListener('touchmove', (event) => {
+                if (isTouching) {
+                    const currentTime = Date.now();
+                    if (currentTime - lastRequestTime > debounceInterval) {
+                        const touch = event.touches[0];
+                        queueEvent("tap", { x: touch.clientX, y: touch.clientY, type: "mousemove" });
+                        lastRequestTime = currentTime;
+                    }
+                }
+            });
+
+            screenImage.addEventListener('touchend', (event) => {
+                isTouching = false;
+                queueEvent("tap", { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY, type: "mouseup" });
+            });
+            */
+
+            // Handle keyboard events
+            iframe.contentWindow.document.addEventListener('keydown', (event) => {
+                queueEvent("key", { key: event.key, type: "keydown" });
+            });
+
+            iframe.contentWindow.document.addEventListener('keyup', (event) => {
+                queueEvent("key", { key: event.key, type: "keyup" });
+            });
+
+            iframe.contentWindow.document.addEventListener('wheel', (event) => {
+                let arrowKey = "";
+                if (event.deltaX < 0) {
+                    arrowKey = "left";
+                } else if (event.deltaX > 0) {
+                    arrowKey = "right";
+                }
+                if (arrowKey) {
+                    queueEvent("key", { key: arrowKey, type: "keydown" });
+                }
+            });
+
+            // Handle frame timing and FPS calculation
+            function requestNextFrame() {
+                const now = performance.now();
+                const frameTime = now - lastFrameTime;
+                lastFrameTime = now;
+
+                const fps = (1000 / frameTime).toFixed(1);
+                frameTimeText.textContent = `LAT: ${frameTime.toFixed(1)} ms`;
+                fpsText.textContent = `FPS: ${fps}`;
+
+                const eventData = encodeEvents();
+                eventQueue = []; // Clear event queue after sending
+
+                const frameUrl = "{{ url_for('video_feed') }}?t=" + new Date().getTime() + (eventData ? "&" + eventData : "");
+                screenImage.src = frameUrl;
+            }
+
+            screenImage.onload = requestNextFrame;
+            requestNextFrame(); // Initial frame request
+        };
+    </script>
+</head>
+<body>
+    <img id="screen-image" draggable="false" alt="Screen Stream">
+    <iframe id="touch-listener-frame" scrolling="no"></iframe>
+    <div id="fps-text" class="overlay-text"></div>
+    <div id="frame-time-text" class="overlay-text"></div>
+</body>
+</html>

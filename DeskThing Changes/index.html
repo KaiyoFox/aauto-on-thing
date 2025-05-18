@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connecting...</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        h1 {
+            font-size: 2em;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="status">Connecting to Server...</h1>
+
+    <script>
+        const serverUrl = "http://127.0.0.1:6080/vnc.html";
+        const maxAttempts = 60;
+        const timeout = 1000;
+        let attemptCounter = 0;  // Counter to track number of attempts
+
+        // Function to create a unique cache buster based on time, random number, and attempt count
+        function addCacheBuster(url, attemptCount) {
+            const randomNum = Math.floor(Math.random() * 1000000);  // Random number for added variability
+            const currentTime = Date.now();  // Device time (milliseconds)
+            return `${url}?cache_buster=${randomNum}-${currentTime}-${attemptCount}`;
+        }
+
+        function fetchWithTimeout(url, timeout) {
+            return new Promise((resolve, reject) => {
+                const timer = setTimeout(() => {
+                    reject(new Error("Timeout"));
+                }, timeout);
+
+                fetch(url, { mode: 'no-cors' })  // 'no-cors' avoids CORS issues but we can't read the response
+                    .then(() => {
+                        clearTimeout(timer);
+                        resolve();
+                    })
+                    .catch((err) => {
+                        clearTimeout(timer);
+                        reject(err);
+                    });
+            });
+        }
+
+        let attempts = 0;
+
+        async function tryConnect() {
+            while (attempts < maxAttempts) {
+                document.getElementById('status').innerText = `Connecting to Server... (Attempt ${attempts + 1})`;
+                try {
+                    // Use the cache-busted URL, combining random number, device time, and attempt count
+                    const urlWithCacheBuster = addCacheBuster(serverUrl, attempts);
+                    await fetchWithTimeout(urlWithCacheBuster, timeout);
+                    window.location.href = urlWithCacheBuster;
+                    return;
+                } catch (e) {
+                    attempts++;
+                    await new Promise(res => setTimeout(res, 1000)); // short pause before retry
+                }
+            }
+            document.getElementById('status').innerText = "Failed to Connect";
+        }
+
+        tryConnect();
+    </script>
+</body>
+</html>
